@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Гонка: собирай монеты</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #232526;
+      height: 100vh;
+    }
+    #gameArea {
+      position: relative;
+      width: 500px;
+      height: 700px;
+      margin: 40px auto;
+      background: #222c36;
+      border-radius: 18px;
+      box-shadow: 0 8px 32px 0 rgba(31,38,135,0.37);
+      overflow: hidden;
+      border: 4px solid #00e1ff;
+    }
+    #score {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: #fff;
+      font-size: 1.5em;
+      font-family: Arial, sans-serif;
+      z-index: 10;
+      background: rgba(0,0,0,0.3);
+      padding: 6px 18px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    #score img {
+      width: 28px;
+      height: 28px;
+      vertical-align: middle;
+    }
+    .car {
+      position: absolute;
+      width: 60px;
+      height: 100px;
+      left: 220px;
+      bottom: 50px;
+      z-index: 5;
+      transition: left 0.08s;
+    }
+    .coin {
+      position: absolute;
+      width: 50px;
+      height: 50px;
+      z-index: 4;
+    }
+    .rock {
+      position: absolute;
+      width: 50px;
+      height: 50px;
+      z-index: 4;
+    }
+    #gameOver {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      background: rgba(34,44,54,0.95);
+      color: #fff;
+      font-size: 2.2em;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 20;
+      display: none;
+      border-radius: 18px;
+    }
+    #restartBtn {
+      margin-top: 30px;
+      padding: 15px 40px;
+      font-size: 1em;
+      background: #00e1ff;
+      color: #232526;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    #restartBtn:hover {
+      background: #00b3c6;
+    }
+    #road {
+      position: absolute;
+      left: 120px;
+      width: 260px;
+      height: 100%;
+      background: #444;
+      z-index: 1;
+      overflow: hidden;
+    }
+    .line {
+      position: absolute;
+      left: 50%;
+      width: 10px;
+      height: 70px;
+      background: #fff;
+      opacity: 0.7;
+      transform: translateX(-50%);
+      z-index: 2;
+    }
+  </style>
+</head>
+<body>
+  <div id="gameArea">
+    <div id="road"></div>
+    <div id="score"><img src="./images/coin.png" alt="coin"> <span id="scoreNum">0</span></div>
+    <div class="car" id="car">
+      <!-- SVG машина с надписью "студент" -->
+      <svg width="60" height="100" viewBox="0 0 60 100">
+        <rect x="10" y="20" width="40" height="60" rx="12" fill="#00e1ff" stroke="#232526" stroke-width="3"/>
+        <rect x="18" y="10" width="24" height="25" rx="8" fill="#fff" stroke="#232526" stroke-width="2"/>
+        <rect x="8" y="80" width="12" height="12" rx="4" fill="#232526"/>
+        <rect x="40" y="80" width="12" height="12" rx="4" fill="#232526"/>
+        <rect x="8" y="8" width="12" height="12" rx="4" fill="#232526"/>
+        <rect x="40" y="8" width="12" height="12" rx="4" fill="#232526"/>
+        <text x="30" y="95" text-anchor="middle" font-size="13" fill="#232526" font-family="Arial">студент</text>
+      </svg>
+    </div>
+    <div id="gameOver">
+      Игра окончена!<br>
+      <span id="finalScore"></span>
+      <button id="restartBtn">Сыграть ещё раз</button>
+    </div>
+  </div>
+  <!-- أصوات -->
+  <audio id="startSound" src="./sounds/game-start-317318.mp3"></audio>
+  <audio id="coinSound" src="./sounds/game-start-317318.mp3"></audio>
+  <audio id="loseSound" src="./sounds/game-start-317318.mp3"></audio>
+  <script>
+    // Дорога и линии
+    const road = document.getElementById('road');
+    function createLines() {
+      for (let i = 0; i < 12; i++) {
+        let line = document.createElement('div');
+        line.className = 'line';
+        line.style.top = (i * 80) + 'px';
+        road.appendChild(line);
+      }
+    }
+    createLines();
+
+    // عناصر اللعبة
+    const gameArea = document.getElementById('gameArea');
+    const car = document.getElementById('car');
+    const scoreDiv = document.getElementById('score');
+    const scoreNum = document.getElementById('scoreNum');
+    const gameOverDiv = document.getElementById('gameOver');
+    const finalScore = document.getElementById('finalScore');
+    const restartBtn = document.getElementById('restartBtn');
+    // أصوات
+    const startSound = document.getElementById('startSound');
+    const coinSound = document.getElementById('coinSound');
+    const loseSound = document.getElementById('loseSound');
+
+    let carX = 220;
+    let carY = 550;
+    let score = 0;
+    let coins = [];
+    let rocks = [];
+    let gameRunning = true;
+    let speed = 4;
+    let coinInterval;
+    let moveLeft = false, moveRight = false, moveUp = false;
+    let roadSpeed = 6;
+
+    // خطوط الطريق
+    let lines = Array.from(document.getElementsByClassName('line'));
+    function moveLines() {
+      lines.forEach(line => {
+        let top = parseInt(line.style.top);
+        top += roadSpeed;
+        if (top > 700) top = -70;
+        line.style.top = top + 'px';
+      });
+    }
+
+    // عملة ذهبية
+    function createCoin() {
+      const coin = document.createElement('img');
+      coin.className = 'coin';
+      coin.src = './images/coin.png';
+      let lane = Math.floor(Math.random() * 3); // 0,1,2
+      let left = 130 + lane * 80;
+      coin.style.left = left + 'px';
+      coin.style.top = '-60px';
+      gameArea.appendChild(coin);
+      coins.push(coin);
+    }
+
+    // عقبة (صورة)
+    function createRock() {
+      const rock = document.createElement('img');
+      rock.className = 'rock';
+      rock.src = './images/rock.png'; // ضع هنا صورة العقبة التي تريدها
+      let lane = Math.floor(Math.random() * 3); // 0,1,2
+      let left = 130 + lane * 80;
+      rock.style.left = left + 'px';
+      rock.style.top = '-60px';
+      gameArea.appendChild(rock);
+      rocks.push(rock);
+    }
+
+    // دالة تحدد سرعة ظهور الحجارة حسب السكور
+    function getRockDelay() {
+      if (score >= 30) return 500; 
+      if (score >= 20) return 600; 
+      if (score >= 10) return 800; 
+      return 1000; 
+    }
+
+    // ظهور الحجارة بديناميكية
+    function rockSpawner() {
+      if (!gameRunning) return;
+      createRock();
+      setTimeout(rockSpawner, getRockDelay());
+    }
+
+    // تحريك العملات
+    function moveCoins() {
+      for (let i = coins.length - 1; i >= 0; i--) {
+        let coin = coins[i];
+        let top = parseInt(coin.style.top);
+        coin.style.top = (top + speed) + 'px';
+        // جمع العملة
+        if (
+          top + 50 > carY &&
+          top < carY + 100 &&
+          parseInt(coin.style.left) + 50 > carX &&
+          parseInt(coin.style.left) < carX + 60
+        ) {
+          gameArea.removeChild(coin);
+          coins.splice(i, 1);
+          score++;
+          scoreNum.textContent = score;
+          coinSound.currentTime = 0;
+          coinSound.play();
+          if (score % 10 === 0) {
+            speed += 1;
+            roadSpeed += 1;
+          }
+          continue;
+        }
+        // Remove if out of area
+        if (top > 700) {
+          gameArea.removeChild(coin);
+          coins.splice(i, 1);
+        }
+      }
+    }
+
+    // تحريك العقبات
+    function moveRocks() {
+      for (let i = rocks.length - 1; i >= 0; i--) {
+        let rock = rocks[i];
+        let top = parseInt(rock.style.top);
+        rock.style.top = (top + speed) + 'px';
+        // تصادم مع السيارة = خسارة
+        if (
+          top + 50 > carY &&
+          top < carY + 100 &&
+          parseInt(rock.style.left) + 50 > carX &&
+          parseInt(rock.style.left) < carX + 60
+        ) {
+          endGame();
+        }
+        // Remove if out of area
+        if (top > 700) {
+          gameArea.removeChild(rock);
+          rocks.splice(i, 1);
+        }
+      }
+    }
+
+    function endGame() {
+      gameRunning = false;
+      clearInterval(coinInterval);
+      gameOverDiv.style.display = 'flex';
+      finalScore.textContent = 'Счёт: ' + score;
+      loseSound.currentTime = 0;
+      loseSound.play();
+    }
+
+    function restartGame() {
+      coins.forEach(r => gameArea.removeChild(r));
+      coins = [];
+      rocks.forEach(r => gameArea.removeChild(r));
+      rocks = [];
+      carX = 220;
+      car.style.left = carX + 'px';
+      score = 0;
+      speed = 4;
+      roadSpeed = 6;
+      scoreNum.textContent = '0';
+      gameOverDiv.style.display = 'none';
+      gameRunning = true;
+      coinInterval = setInterval(createCoin, 1200);
+      setTimeout(rockSpawner, getRockDelay());
+      startSound.currentTime = 0;
+      startSound.play();
+      requestAnimationFrame(gameLoop);
+    }
+
+    // Управление
+    document.addEventListener('keydown', e => {
+      if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'ф') moveLeft = true;
+      if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'в') moveRight = true;
+      if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'ц') moveUp = true;
+    });
+    document.addEventListener('keyup', e => {
+      if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'ф') moveLeft = false;
+      if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'в') moveRight = false;
+      if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'ц') moveUp = false;
+    });
+
+    function gameLoop() {
+      if (!gameRunning) return;
+      if (moveLeft && carX > 130) carX -= 8;
+      if (moveRight && carX < 290) carX += 8;
+      car.style.left = carX + 'px';
+      if (moveUp) {
+        speed = 8;
+        roadSpeed = 12;
+      } else {
+        speed = 4 + Math.floor(score / 10);
+        roadSpeed = 6 + Math.floor(score / 10);
+      }
+      moveCoins();
+      moveRocks();
+      moveLines();
+      requestAnimationFrame(gameLoop);
+    }
+
+    restartBtn.onclick = restartGame;
+
+    // Start
+    car.style.left = carX + 'px';
+    coinInterval = setInterval(createCoin, 1200);
+    setTimeout(rockSpawner, getRockDelay());
+    startSound.play();
+    requestAnimationFrame(gameLoop);
+
+    // نهاية اللعبة إذا خرجت السيارة من الطريق
+    setInterval(() => {
+      if (!gameRunning) return;
+      if (carX < 120 || carX > 320) {
+        endGame();
+      }
+    }, 100);
+  </script>
+</body>
+</html>
